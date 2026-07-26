@@ -11,8 +11,9 @@
 | Document Vault + CV intelligence | Done (apply migration 0003) |
 | AI professor briefs (OpenAI) | Done (needs OPENAI_API_KEY) |
 | Morning Brief + Coach + Interview Prep + Learning | Done (apply migration **0004**) |
-| Analytics + Journey + Reminders | Done (apply migration **0005** for reminders) |
-| Email cron / Resend / security pass | Later |
+| Analytics + Journey + Reminders | Done (apply **0005**) |
+| Embeddings + Resend email cron | Done (apply **0006**; needs keys below) |
+| Security pass / export packs | Later |
 
 ## Apply latest migration
 
