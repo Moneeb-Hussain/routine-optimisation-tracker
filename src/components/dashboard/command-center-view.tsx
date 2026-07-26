@@ -28,7 +28,13 @@ function sleepTone(hours: number, target: number) {
   return "critical" as const;
 }
 
-export function CommandCenterView({ data }: { data: CommandCenterData }) {
+export function CommandCenterView({
+  data,
+  embed = false,
+}: {
+  data: CommandCenterData;
+  embed?: boolean;
+}) {
   const d = data;
   const now = new Date();
   const localDate = new Intl.DateTimeFormat("en-US", {
@@ -43,11 +49,8 @@ export function CommandCenterView({ data }: { data: CommandCenterData }) {
     minute: "2-digit",
   }).format(now);
 
-  return (
-    <AppShell
-      title="Command Center"
-      subtitle="Your daily admissions operating picture"
-    >
+  const body = (
+    <>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <Badge tone={d.mode === "live" ? "good" : "brand"}>
           {d.mode === "live" ? "Live data" : "UI preview · demo data"}
@@ -208,6 +211,17 @@ export function CommandCenterView({ data }: { data: CommandCenterData }) {
           </div>
         </div>
       </section>
+    </>
+  );
+
+  if (embed) return body;
+
+  return (
+    <AppShell
+      title="Command Center"
+      subtitle="Your daily admissions operating picture"
+    >
+      {body}
     </AppShell>
   );
 }

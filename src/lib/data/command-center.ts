@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/env";
 import { calculateExecutionScore } from "@/lib/domain/execution-score";
+import { summarizeStage } from "@/lib/domain/outreach-stages";
 import { commandCenterDemo } from "@/lib/fixtures/command-center";
 import type { DailyPlan, Goal, Profile, SleepLog, Task } from "@/lib/types";
 import type { ScoreBreakdownItem } from "@/lib/domain/execution-score";
@@ -123,6 +124,9 @@ export async function getCommandCenterData(): Promise<CommandCenterData> {
     goalsRes,
     weekTasksRes,
     weekFocusRes,
+    professorsRes,
+    followUpsRes,
+    prepTracksRes,
   ] = await Promise.all([
     supabase.from("user_preferences").select("*").eq("user_id", user.id).maybeSingle(),
     supabase
@@ -165,6 +169,20 @@ export async function getCommandCenterData(): Promise<CommandCenterData> {
       .select("started_at, actual_minutes, planned_minutes, status")
       .eq("user_id", user.id)
       .gte("started_at", `${weekStart}T00:00:00`),
+    supabase.from("professors").select("id, full_name, outreach_stage, universities(name)").eq("user_id", user.id),
+    supabase
+      .from("outreach_followups")
+      .select("id, due_on, status, professors(full_name)")
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .lte("due_on", today)
+      .order("due_on")
+      .limit(5),
+    supabase
+      .from("preparation_tracks")
+      .select("completion_percent, status")
+      .eq("user_id", user.id)
+      .eq("status", "active"),
   ]);
 
   const plan = planRes.data as DailyPlan | null;
@@ -228,6 +246,15 @@ export async function getCommandCenterData(): Promise<CommandCenterData> {
           goals.reduce((sum, g) => sum + (g.progress_percent || 0), 0) / goals.length,
         );
 
+  const prepTracks = prepTracksRes.data || [];
+  const interviewPrepPct =
+    prepTracks.length === 0
+      ? 0
+      : Math.round(
+          prepTracks.reduce((s, t) => s + (t.completion_percent || 0), 0) /
+            prepTracks.length,
+        );
+
   return {
     ...commandCenterDemo,
     mode: "live",
@@ -247,6 +274,7 @@ export async function getCommandCenterData(): Promise<CommandCenterData> {
     energyLevel: Number(sleep?.energy_level ?? 3),
     deepWorkMinutes,
     deepWorkTarget,
+    interviewPrepPct,
     applicationReadinessPct: avgGoalProgress,
     weeklyExecution,
     mustDos: mustDos.slice(0, 6).map((t) => ({
@@ -256,19 +284,34 @@ export async function getCommandCenterData(): Promise<CommandCenterData> {
       category: t.category,
       done: t.status === "done",
     })),
-    nextBestAction: {
-      title:
-        mustDos.find((t) => t.status !== "done")?.title ||
-        tasks.find((t) => t.status !== "done")?.title ||
-        "Create your first must-do task for today",
-      reason: plan?.current_blocker
-        ? `Current blocker: ${plan.current_blocker}`
-        : "Highest-impact incomplete item scheduled for today.",
-      minutes:
-        mustDos.find((t) => t.status !== "done")?.estimated_minutes ||
-        tasks.find((t) => t.status !== "done")?.estimated_minutes ||
-        25,
-    },
+    nextBestAction: (() => {
+      const due = (followUpsRes.data || [])[0] as
+        | {
+            professors?: { full_name?: string } | Array<{ full_name?: string }> | null;
+          }
+        | undefined;
+      const dueProf = due
+        ? Array.isArray(due.professors)
+          ? due.professors[0]?.full_name
+          : due.professors?.full_name
+        : null;
+      return {
+        title: dueProf
+          ? `Follow up: ${dueProf}`
+          : mustDos.find((t) => t.status !== "done")?.title ||
+            tasks.find((t) => t.status !== "done")?.title ||
+            "Add a university and your first professor",
+        reason: dueProf
+          ? "A professor follow-up is due — one strong follow-up beats new generic drafts."
+          : plan?.current_blocker
+            ? `Current blocker: ${plan.current_blocker}`
+            : "Highest-impact incomplete item for today’s admissions progress.",
+        minutes:
+          mustDos.find((t) => t.status !== "done")?.estimated_minutes ||
+          tasks.find((t) => t.status !== "done")?.estimated_minutes ||
+          25,
+      };
+    })(),
     risk: {
       label: plan?.current_blocker ? "Active blocker" : "No blocker logged",
       detail:
@@ -279,9 +322,12 @@ export async function getCommandCenterData(): Promise<CommandCenterData> {
       sleep && sleep.duration_hours != null && sleep.duration_hours < sleepTarget - 1
         ? "Sleep was short. Protect one high-impact task and keep the workload realistic."
         : "One verified next action beats a crowded list. Finish the must-do that moves the US goal.",
-    // Keep pipeline as demo until Phase 2 CRM exists
-    pipeline: [...commandCenterDemo.pipeline],
-    followUps: [...commandCenterDemo.followUps],
+    pipeline: professorsRes.error
+      ? [...commandCenterDemo.pipeline]
+      : buildPipeline(professorsRes.data || []),
+    followUps: followUpsRes.error
+      ? [...commandCenterDemo.followUps]
+      : buildFollowUps(followUpsRes.data || [], today),
     categoryMix: [...commandCenterDemo.categoryMix],
     recentWins:
       tasks.filter((t) => t.status === "done").slice(0, 3).map((t) => t.title)
@@ -292,6 +338,61 @@ export async function getCommandCenterData(): Promise<CommandCenterData> {
             .map((t) => t.title)
         : [...commandCenterDemo.recentWins],
   };
+}
+
+function buildPipeline(
+  professors: Array<{ outreach_stage?: string | null }>,
+): Array<{ stage: string; count: number }> {
+  if (!professors.length) {
+    return [
+      { stage: "Discovered", count: 0 },
+      { stage: "Researching", count: 0 },
+      { stage: "Strong Fit", count: 0 },
+      { stage: "Draft Ready", count: 0 },
+      { stage: "Sent", count: 0 },
+      { stage: "Follow-up Due", count: 0 },
+      { stage: "Replied", count: 0 },
+    ];
+  }
+
+  const counts = new Map<string, number>();
+  for (const p of professors) {
+    const bucket = summarizeStage(p.outreach_stage || "Discovered");
+    counts.set(bucket, (counts.get(bucket) || 0) + 1);
+  }
+
+  const order = [
+    "Discovered",
+    "Researching",
+    "Strong Fit",
+    "Draft Ready",
+    "Sent",
+    "Follow-up Due",
+    "Replied",
+  ];
+
+  return order.map((stage) => ({ stage, count: counts.get(stage) || 0 }));
+}
+
+function buildFollowUps(
+  rows: Array<{
+    due_on?: string | null;
+    professors?: { full_name?: string } | Array<{ full_name?: string }> | null;
+  }>,
+  today: string,
+): Array<{ professor: string; university: string; due: string; tone: Tone }> {
+  if (!rows.length) return [];
+
+  return rows.map((row) => {
+    const prof = Array.isArray(row.professors) ? row.professors[0] : row.professors;
+    const dueOn = row.due_on || today;
+    return {
+      professor: prof?.full_name || "Professor",
+      university: "—",
+      due: dueOn <= today ? "Today" : dueOn,
+      tone: (dueOn <= today ? "critical" : "watch") as Tone,
+    };
+  });
 }
 
 export async function getCurrentProfile() {

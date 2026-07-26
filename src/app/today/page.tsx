@@ -1,11 +1,16 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { TodayClient } from "@/components/planning/today-client";
+import { MorningBriefCard } from "@/components/coach/morning-brief-card";
+import { EveningReviewForm } from "@/components/prep/evening-review-form";
 import { getTodayContext } from "@/lib/data/command-center";
+import { getOrBuildMorningBrief } from "@/lib/data/coach-context";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 
 export default async function TodayPage() {
   const ctx = await getTodayContext();
+  const briefBundle =
+    ctx.configured && ctx.today ? await getOrBuildMorningBrief() : null;
 
   return (
     <AppShell title="Today" subtitle="Plan the day around one primary goal">
@@ -30,7 +35,13 @@ export default async function TodayPage() {
           </p>
         </div>
       ) : (
-        <TodayClient today={ctx.today} plan={ctx.plan} tasks={ctx.tasks} />
+        <div className="space-y-4">
+          {briefBundle && (
+            <MorningBriefCard brief={briefBundle.brief} date={briefBundle.date} />
+          )}
+          <TodayClient today={ctx.today} plan={ctx.plan} tasks={ctx.tasks} />
+          <EveningReviewForm today={ctx.today} />
+        </div>
       )}
     </AppShell>
   );

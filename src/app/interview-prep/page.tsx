@@ -1,11 +1,73 @@
-import PlaceholderPage from "@/components/layout/placeholder-page";
+import Link from "next/link";
+import { AppShell } from "@/components/layout/app-shell";
+import { InterviewPrepClient } from "@/components/prep/interview-prep-client";
+import { createClient } from "@/lib/supabase/server";
+import { isSupabaseConfigured } from "@/lib/env";
+import { Badge } from "@/components/ui/badge";
 
-export default function Page() {
+export default async function InterviewPrepPage() {
+  if (!isSupabaseConfigured()) {
+    return (
+      <AppShell title="Interview Prep" subtitle="Tracks, drills, and question bank">
+        <div className="panel-surface p-6">
+          <Badge tone="watch">Setup required</Badge>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Configure Supabase and run migration 0004.
+          </p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return (
+      <AppShell title="Interview Prep" subtitle="Tracks, drills, and question bank">
+        <div className="panel-surface p-6">
+          <p className="text-sm text-muted-foreground">
+            Sign in to start prep.{" "}
+            <Link href="/login" className="font-semibold text-brand">
+              Login
+            </Link>
+          </p>
+        </div>
+      </AppShell>
+    );
+  }
+
+  const [tracks, items, questions] = await Promise.all([
+    supabase
+      .from("preparation_tracks")
+      .select("id, title, track_type, description, status, completion_percent")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("preparation_items")
+      .select("id, track_id, title, status, estimated_minutes, day_number")
+      .eq("user_id", user.id)
+      .order("sort_order"),
+    supabase
+      .from("question_bank")
+      .select("id, question, category, difficulty, expected_answer")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+
   return (
-    <PlaceholderPage
+    <AppShell
       title="Interview Prep"
-      phase="Phase 3"
-      description="Tracks, modules, questions, and mock interviews."
-    />
+      subtitle="Build one track, mark drills done, bank questions"
+    >
+      <InterviewPrepClient
+        tracks={tracks.data || []}
+        items={items.data || []}
+        questions={questions.data || []}
+      />
+    </AppShell>
   );
 }

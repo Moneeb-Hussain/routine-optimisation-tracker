@@ -44,26 +44,26 @@ const sections = [
   {
     title: "Admissions",
     items: [
-      { label: "Professor CRM", href: "/professors", icon: Users, soon: true },
-      { label: "Email Studio", href: "/email-studio", icon: Mail, soon: true },
-      { label: "Document Vault", href: "/documents", icon: FolderOpen, soon: true },
-      { label: "Journey to USA", href: "/journey", icon: Plane, soon: true },
+      { label: "Professor CRM", href: "/professors", icon: Users },
+      { label: "Email Studio", href: "/email-studio", icon: Mail },
+      { label: "Document Vault", href: "/documents", icon: FolderOpen },
+      { label: "Journey to USA", href: "/journey", icon: Plane },
     ],
   },
   {
     title: "Prepare",
     items: [
-      { label: "Interview Prep", href: "/interview-prep", icon: Mic2, soon: true },
-      { label: "Learning Plans", href: "/learning", icon: BookOpen, soon: true },
+      { label: "Interview Prep", href: "/interview-prep", icon: Mic2 },
+      { label: "Learning Plans", href: "/learning", icon: BookOpen },
       { label: "Sleep & Energy", href: "/sleep", icon: Moon },
-      { label: "AI Coach", href: "/coach", icon: Sparkles, soon: true },
+      { label: "AI Coach", href: "/coach", icon: Sparkles },
     ],
   },
   {
     title: "System",
     items: [
-      { label: "Analytics", href: "/analytics", icon: BarChart3, soon: true },
-      { label: "Reminders", href: "/reminders", icon: Bell, soon: true },
+      { label: "Analytics", href: "/analytics", icon: BarChart3 },
+      { label: "Reminders", href: "/reminders", icon: Bell },
       { label: "Settings", href: "/settings/profile", icon: Settings },
     ],
   },
@@ -202,13 +202,19 @@ export function Sidebar() {
               <div className="space-y-0.5 px-2">
                 {section.items.map((item) => {
                   const active = isActive(item.href);
-                  const soon = "soon" in item && item.soon;
+                  const soon =
+                    "soon" in item &&
+                    Boolean((item as { soon?: boolean }).soon);
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
                       onClick={() => setMobileOpenStore(false)}
-                      className={cn("nav-item relative", active && "active", soon && "opacity-70")}
+                      className={cn(
+                        "nav-item relative",
+                        active && "active",
+                        soon && "opacity-70",
+                      )}
                       title={item.label}
                     >
                       <item.icon className="h-[18px] w-[18px] shrink-0" />

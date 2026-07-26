@@ -26,3 +26,11 @@ export function getSupabaseAnonKey(): string {
   }
   return key;
 }
+
+export function isOpenAIConfigured(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY);
+}
+
+export function getOpenAIModel(): string {
+  return process.env.OPENAI_MODEL || "gpt-4.1-mini";
+}

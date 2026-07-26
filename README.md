@@ -6,15 +6,54 @@
 
 | Layer | Status |
 | --- | --- |
-| Next.js 16 + TypeScript + Tailwind 4 | Done |
-| Command Center UI | Done |
-| Supabase clients + `proxy.ts` auth refresh | Done |
-| Auth (email/password, magic link, reset) | Done |
-| Onboarding (prefilled editable profile) | Done |
-| Phase 1 SQL + RLS | Done (apply in Supabase) |
-| Goals / Tasks / Today / Focus / Sleep | Done |
-| Execution score domain + Vitest | Done |
-| Professor CRM / Email Studio | Phase 2 |
+| Phase 1 foundation (auth, goals, tasks, sleep, focus) | Done |
+| Phase 2 universities + Professor CRM + Email Studio | Done |
+| Document Vault + CV intelligence | Done (apply migration 0003) |
+| AI professor briefs (OpenAI) | Done (needs OPENAI_API_KEY) |
+| Morning Brief + Coach + Interview Prep + Learning | Done (apply migration **0004**) |
+| Analytics + Journey + Reminders | Done (apply migration **0005** for reminders) |
+| Email cron / Resend / security pass | Later |
+
+## Apply latest migration
+
+In Supabase SQL Editor, run **in order** if not already applied:
+
+1. `supabase/migrations/0001_phase1_foundation.sql`
+2. `supabase/migrations/0002_phase2_admissions.sql`
+3. `supabase/migrations/0003_phase2_documents.sql`
+4. `supabase/migrations/0004_phase3_prep_coach.sql`
+5. `supabase/migrations/0005_phase4_reminders.sql` ← **reminders**
+
+See [DEPLOY.md](./DEPLOY.md) for hosting.
+
+### Morning checklist (use tomorrow)
+
+```bash
+nvm use 22
+npm run dev
+```
+
+1. Sign in → `/today` — Morning Brief appears automatically  
+2. Set primary goal + mark must-dos  
+3. `/interview-prep` — create a track → mark one Done → practice a question  
+4. `/coach` — ask “What should I do in the next 90 minutes?”  
+5. `/dashboard` — live score + brief  
+6. `/analytics` — generate weekly review  
+7. `/journey` — check stage progress  
+8. `/reminders` — set a follow-up nudge  
+9. Evening: save review at bottom of `/today`  
+10. Optional: `/sleep` log last night so tomorrow’s brief is sleep-aware  
+
+OpenAI is optional — rule-based brief + coach work without it. With `OPENAI_API_KEY`, refresh brief / ask coach for richer answers. PDF/DOCX uploads auto-extract when the file has text.
+
+### Documents (Phase 2b)
+
+After `0003`:
+
+1. `/documents` — upload CV (txt/md/pdf/docx)
+2. Open the document — paste text only if extract was empty (scanned PDF)
+3. `/professors/[id]` — Generate AI research brief
+
 
 ## Requirements
 
@@ -87,6 +126,7 @@ Open [http://localhost:3000](http://localhost:3000).
 - [DATABASE.md](./DATABASE.md)
 - [AI-SYSTEM.md](./AI-SYSTEM.md)
 - [ROADMAP.md](./ROADMAP.md)
+- [DEPLOY.md](./DEPLOY.md)
 
 ## Security notes
 

@@ -1,6 +1,6 @@
 # Roadmap — Mission USA AI
 
-## Phase 1 — Foundation (in progress)
+## Phase 1 — Foundation
 
 - [x] Next.js project + design system + Command Center UI
 - [x] Supabase clients, proxy auth refresh, login/signup/magic/reset
@@ -8,20 +8,42 @@
 - [x] Migrations + RLS
 - [x] Goals, tasks, daily plans, focus sessions, sleep
 - [x] Execution score domain module + unit tests
-- [ ] End-to-end Playwright smoke (after your Supabase project is connected)
+- [x] Playwright smoke suite (browser install may fail on older macOS)
 
 ## Phase 2 — Admissions intelligence
 
-Universities, professor CRM, fit analyzer, generic-fit detection, document vault, email studio, outreach pipeline.
+- [x] Universities CRUD
+- [x] Professor CRM (kanban + table + stage updates)
+- [x] Fit score calculator + generic-fit detector (+ tests)
+- [x] Email templates + drafts + approve/mark-sent + follow-ups
+- [x] Live Command Center pipeline / follow-ups
+- [x] Document Vault + CV intelligence
+- [x] AI-assisted professor briefs (OpenAI structured outputs)
+- [x] PDF/DOCX automatic text extraction (mammoth + unpdf)
+- [x] Keyword chunk retrieval for coach answers
 
 ## Phase 3 — Preparation and coaching
 
-Interview prep, learning plans, question bank, AI Coach, morning/evening/weekly reviews.
+- [x] Migration 0004 (prep tracks, learning, morning briefs, coach messages)
+- [x] Morning Brief (rule + optional AI polish) on Today + Command Center
+- [x] Evening review → `daily_reviews`
+- [x] Interview Prep tracks / items / question bank UI
+- [x] Question attempt practice logging
+- [x] Learning Plans lightweight UI
+- [x] AI Coach with context retrieval (rule fallback + OpenAI when keyed)
+- [x] Weekly review generate + notes (Analytics)
 
 ## Phase 4 — Automation and analytics
 
-Reminders, cron, Resend templates, analytics dashboards, Journey to USA, export.
+- [x] Analytics dashboard (live week charts + weekly review)
+- [x] Journey to USA (goal-linked stages)
+- [x] Reminders CRUD + notification prefs (migration 0005)
+- [ ] Email delivery via Resend + cron worker
+- [ ] Export packs
 
 ## Phase 5 — Production hardening
 
-Vitest + Playwright, a11y, performance, security review, rate limits, deployment docs.
+- [x] Deploy notes (`DEPLOY.md`)
+- [ ] Rate limits / security review (deferred)
+- [ ] a11y + performance pass
+- [ ] Production monitoring
