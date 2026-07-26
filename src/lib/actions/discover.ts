@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 import OpenAI from "openai";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -9,6 +8,7 @@ import {
   isOpenAIConfigured,
   isSupabaseConfigured,
 } from "@/lib/env";
+import { parseDiscoveryText } from "@/lib/domain/discovery-parse";
 
 export type ActionState = { error?: string; success?: string; runId?: string };
 
@@ -24,30 +24,11 @@ async function requireUser() {
   return { error: null, supabase, user };
 }
 
-const discoverySchema = z.object({
-  summary: z.string(),
-  universities: z.array(
-    z.object({
-      name: z.string(),
-      country: z.enum(["US", "CA"]),
-      department_or_lab: z.string().default(""),
-      why_fit: z.string(),
-      evidence_urls: z.array(z.string()).default([]),
-      confidence: z.enum(["high", "medium", "low"]).default("medium"),
-    }),
-  ),
-  professors: z.array(
-    z.object({
-      name: z.string(),
-      university_name: z.string(),
-      country: z.enum(["US", "CA"]),
-      department_or_lab: z.string().default(""),
-      why_fit: z.string(),
-      evidence_urls: z.array(z.string()).default([]),
-      confidence: z.enum(["high", "medium", "low"]).default("medium"),
-    }),
-  ),
-});
+const DISCOVERY_JSON_SHAPE = `{
+  "summary": string,
+  "universities": [{ "name", "country": "US"|"CA", "department_or_lab", "why_fit", "evidence_urls": string[], "confidence": "high"|"medium"|"low" }],
+  "professors": [{ "name", "university_name", "country": "US"|"CA", "department_or_lab", "why_fit", "evidence_urls": string[], "confidence": "high"|"medium"|"low" }]
+}`;
 
 export async function runDiscoveryAction(): Promise<ActionState> {
   const ctx = await requireUser();
@@ -87,6 +68,20 @@ export async function runDiscoveryAction(): Promise<ActionState> {
   const model = getOpenAIModel();
 
   try {
+    const applicant = {
+      name: profile.full_name,
+      degree: profile.degree,
+      university: profile.university,
+      cgpa: profile.cgpa,
+      ielts: profile.ielts_academic,
+      research_interests: profile.research_interests,
+      strongest_project: profile.strongest_project,
+      achievements: profile.achievements,
+      target_primary: profile.target_primary,
+      target_secondary: profile.target_secondary,
+      target_intake: profile.target_intake,
+    };
+
     const response = await client.responses.create({
       model,
       tools: [{ type: "web_search" }],
@@ -100,50 +95,62 @@ Rules:
 - Only recommend names you can ground with public faculty/lab pages; include evidence_urls.
 - Never invent email addresses or claim openings exist.
 - Mark confidence honestly (high/medium/low).
+- Country must be exactly "US" or "CA" (not "USA" or "Canada").
 - Return 6–10 universities and 8–12 professors across US and Canada.
-After searching, respond with ONLY JSON:
-{ summary, universities: [{ name, country: "US"|"CA", department_or_lab, why_fit, evidence_urls, confidence }], professors: [{ name, university_name, country, department_or_lab, why_fit, evidence_urls, confidence }] }`,
+After searching, respond with ONLY valid JSON matching:
+${DISCOVERY_JSON_SHAPE}`,
         },
         {
           role: "user",
           content: JSON.stringify({
-            applicant: {
-              name: profile.full_name,
-              degree: profile.degree,
-              university: profile.university,
-              cgpa: profile.cgpa,
-              ielts: profile.ielts_academic,
-              research_interests: profile.research_interests,
-              strongest_project: profile.strongest_project,
-              achievements: profile.achievements,
-              target_primary: profile.target_primary,
-              target_secondary: profile.target_secondary,
-              target_intake: profile.target_intake,
-            },
+            applicant,
             task: "Recommend must-consider universities and professors to approach for funded graduate study.",
           }),
         },
       ],
     });
 
-    const text = response.output_text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const raw = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(text || "{}");
-    const parsed = discoverySchema.safeParse(raw);
+    let text = response.output_text || "";
+    let parsed = parseDiscoveryText(text);
 
-    if (!parsed.success) {
+    // Web search often returns prose/citations — second pass forces clean JSON.
+    if (!parsed && text.trim()) {
+      const structured = await client.responses.create({
+        model,
+        input: [
+          {
+            role: "system",
+            content: `Convert the discovery notes into ONLY JSON with this shape:
+${DISCOVERY_JSON_SHAPE}
+Normalize country to "US" or "CA". Drop entries without a name. Do not invent new universities/professors beyond what the notes support.`,
+          },
+          {
+            role: "user",
+            content: text.slice(0, 100_000),
+          },
+        ],
+        text: { format: { type: "json_object" } },
+      });
+      text = `${text}\n\n---structured---\n${structured.output_text || ""}`;
+      parsed = parseDiscoveryText(structured.output_text || "");
+    }
+
+    if (!parsed) {
       await ctx.supabase
         .from("discovery_runs")
         .update({
           status: "failed",
           error_message: "Could not parse discovery JSON",
-          raw_ai: { text },
+          raw_ai: { text: text.slice(0, 50_000) },
         })
         .eq("id", run.id);
-      return { error: "Discovery returned unusable data. Try again." };
+      return {
+        error:
+          "Discovery returned unusable data. Try again — if it keeps failing, check OPENAI_MODEL supports web_search.",
+      };
     }
 
-    const uniRows = parsed.data.universities.map((u) => ({
+    const uniRows = parsed.universities.map((u) => ({
       user_id: ctx.user!.id,
       run_id: run.id,
       kind: "university" as const,
@@ -157,7 +164,7 @@ After searching, respond with ONLY JSON:
       status: "suggested" as const,
     }));
 
-    const profRows = parsed.data.professors.map((p) => ({
+    const profRows = parsed.professors.map((p) => ({
       user_id: ctx.user!.id,
       run_id: run.id,
       kind: "professor" as const,
@@ -182,8 +189,8 @@ After searching, respond with ONLY JSON:
       .from("discovery_runs")
       .update({
         status: "completed",
-        raw_ai: parsed.data,
-        query_summary: parsed.data.summary || querySummary,
+        raw_ai: parsed,
+        query_summary: parsed.summary || querySummary,
       })
       .eq("id", run.id);
 
@@ -192,8 +199,8 @@ After searching, respond with ONLY JSON:
       feature: "discover",
       request_type: "web_search",
       model,
-      prompt_version: "discover_v1",
-      output: parsed.data,
+      prompt_version: "discover_v2",
+      output: parsed,
       referenced_entities: [{ type: "discovery_run", id: run.id }],
     });
 
