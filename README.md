@@ -2,62 +2,95 @@
 
 **Tagline:** Your AI-powered performance and graduate-admissions operating system.
 
-Private command center for daily execution, professor outreach, interview prep, sleep-aware planning, and the journey to funded graduate study in the United States.
-
 ## Status
-
-**Step 1 complete:** Next.js foundation + premium Command Center UI (demo data).
 
 | Layer | Status |
 | --- | --- |
 | Next.js 16 + TypeScript + Tailwind 4 | Done |
-| App shell (sidebar, mobile nav, header) | Done |
-| Command Center dashboard + charts | Done (fixtures) |
-| Auth / Supabase / RLS | Next |
-| Goals, tasks, sleep persistence | Next |
+| Command Center UI | Done |
+| Supabase clients + `proxy.ts` auth refresh | Done |
+| Auth (email/password, magic link, reset) | Done |
+| Onboarding (prefilled editable profile) | Done |
+| Phase 1 SQL + RLS | Done (apply in Supabase) |
+| Goals / Tasks / Today / Focus / Sleep | Done |
+| Execution score domain + Vitest | Done |
 | Professor CRM / Email Studio | Phase 2 |
 
-## Design notes
+## Requirements
 
-Visual language is inspired by the polished hospital-ops dashboard (KPI cards, progress rings, Recharts, calm cards) adapted for Mission USA:
+- **Node 20+** (Node 22 recommended via `nvm use 22`)
+- A Supabase project (for live auth + data)
 
-- Dark navy sidebar
-- Cool light workspace (not cream)
-- Ocean teal brand (not purple)
-- Fraunces for display headings, Geist for UI text
+## Setup
 
-Demo numbers on the Command Center are **fixtures** so the UI can be reviewed before database wiring.
-
-## Local development
-
-Requires **Node 20+** (Node 22 recommended).
+### 1. Install
 
 ```bash
-# if you use nvm
 nvm use 22
-
 npm install
+```
+
+### 2. Environment
+
+```bash
+cp .env.example .env.local
+```
+
+Fill at least:
+
+```env
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_ANON_KEY
+```
+
+Never put `SUPABASE_SERVICE_ROLE_KEY` in client code. Keep it server-only when you need admin jobs later.
+
+Without these keys, the app still runs in **UI preview mode** (demo dashboard fixtures). Auth forms will explain that setup is required.
+
+### 3. Database
+
+In the Supabase SQL Editor, run:
+
+`supabase/migrations/0001_phase1_foundation.sql`
+
+Add Auth redirect URL: `http://localhost:3000/auth/callback`
+
+### 4. Run
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — you will be redirected to `/dashboard`.
+Open [http://localhost:3000](http://localhost:3000).
 
-Copy `.env.example` to `.env.local` when you are ready for Supabase / OpenAI (not required for the UI preview).
+### Suggested first path
+
+1. `/signup` → create account  
+2. `/onboarding` → confirm Moneeb profile (editable)  
+3. `/today` → set primary goal  
+4. `/tasks` → add must-do tasks for today  
+5. `/focus` → run a session  
+6. `/sleep` → log last night  
+7. `/dashboard` → see live score + must-dos  
 
 ## Scripts
 
-- `npm run dev` — development server
-- `npm run build` — production build
-- `npm run start` — run production build
-- `npm run lint` — ESLint
+- `npm run dev` — development server  
+- `npm run build` — production build  
+- `npm run lint` — ESLint  
+- `npm test` — Vitest unit tests  
 
-## Product docs
+## Docs
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — system shape
-- [DATABASE.md](./DATABASE.md) — planned schema (Phase 1+)
-- [AI-SYSTEM.md](./AI-SYSTEM.md) — AI principles and tool design
-- [ROADMAP.md](./ROADMAP.md) — phased delivery
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [DATABASE.md](./DATABASE.md)
+- [AI-SYSTEM.md](./AI-SYSTEM.md)
+- [ROADMAP.md](./ROADMAP.md)
 
-## Security
+## Security notes
 
-Never put `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, `RESEND_API_KEY`, or `CRON_SECRET` in client code or commit them to git.
+- RLS on every user-owned table  
+- Session refresh via Next.js 16 `src/proxy.ts` + `@supabase/ssr` (`getAll` / `setAll` only)  
+- Server Actions validate input with Zod  
+- Secrets stay in env — never committed  

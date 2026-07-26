@@ -3,10 +3,12 @@
 ## Phase 1 — Foundation (in progress)
 
 - [x] Next.js project + design system + Command Center UI
-- [ ] Supabase clients, auth, onboarding (prefilled profile)
-- [ ] Migrations + RLS
-- [ ] Goals, tasks, daily plans, focus sessions, sleep
-- [ ] Seed data + tests for scoring helpers
+- [x] Supabase clients, proxy auth refresh, login/signup/magic/reset
+- [x] Onboarding (prefilled editable profile) + goal-tree seed
+- [x] Migrations + RLS
+- [x] Goals, tasks, daily plans, focus sessions, sleep
+- [x] Execution score domain module + unit tests
+- [ ] End-to-end Playwright smoke (after your Supabase project is connected)
 
 ## Phase 2 — Admissions intelligence
 
