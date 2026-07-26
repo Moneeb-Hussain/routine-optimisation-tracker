@@ -35,6 +35,7 @@ Run in Supabase SQL Editor, in order:
 4. `0004_phase3_prep_coach.sql`
 5. `0005_phase4_reminders.sql`
 6. `0006_embeddings_reminders_email.sql`
+7. `0007_study_plans_discover.sql` ← Study Plans + AI Discover
 
 ## What `vercel.json` does
 

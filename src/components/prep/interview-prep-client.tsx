@@ -8,6 +8,7 @@ import {
   togglePrepItemDoneAction,
   addQuestionAction,
   saveQuestionAttemptAction,
+  generateInterviewQuestionsFromCvAction,
   type ActionState,
 } from "@/lib/actions/prep";
 import { Button } from "@/components/ui/button";
@@ -43,10 +44,12 @@ export function InterviewPrepClient({
   tracks,
   items,
   questions,
+  cvDocuments = [],
 }: {
   tracks: PrepTrack[];
   items: PrepItem[];
   questions: QuestionRow[];
+  cvDocuments?: Array<{ id: string; title: string }>;
 }) {
   const [trackState, trackAction, trackPending] = useActionState(
     createPrepTrackAction,
@@ -64,6 +67,10 @@ export function InterviewPrepClient({
     saveQuestionAttemptAction,
     {} as ActionState,
   );
+  const [cvQState, cvQAction, cvQPending] = useActionState(
+    generateInterviewQuestionsFromCvAction,
+    {} as ActionState,
+  );
 
   const activeTrack = tracks[0];
   const activeItems = items.filter((i) => i.track_id === activeTrack?.id);
@@ -71,7 +78,8 @@ export function InterviewPrepClient({
 
   return (
     <div className="grid gap-4 lg:grid-cols-12">
-      <form action={trackAction} className="panel-surface space-y-3 p-5 lg:col-span-4">
+      <div className="space-y-4 lg:col-span-4">
+      <form action={trackAction} className="panel-surface space-y-3 p-5">
         <h2 className="text-sm font-semibold">New prep track</h2>
         <p className="text-xs text-muted-foreground">
           Creates a track with 5 starter drills ready for morning practice.
@@ -109,6 +117,43 @@ export function InterviewPrepClient({
           {trackPending ? "Creating…" : "Create track"}
         </Button>
       </form>
+
+      <form action={cvQAction} className="panel-surface space-y-3 p-5">
+        <h2 className="text-sm font-semibold">From your CV</h2>
+        <p className="text-xs text-muted-foreground">
+          LLM generates professor-interview questions from your CV + profile. Practice them below.
+        </p>
+        <select
+          name="document_id"
+          className="h-11 w-full rounded-lg border border-border bg-card px-3 text-sm"
+          defaultValue={cvDocuments[0]?.id || ""}
+        >
+          <option value="">Latest CV (auto)</option>
+          {cvDocuments.map((d) => (
+            <option key={d.id} value={d.id}>
+              {d.title}
+            </option>
+          ))}
+        </select>
+        {activeTrack && (
+          <input type="hidden" name="track_id" value={activeTrack.id} />
+        )}
+        {cvQState.error && <p className="text-sm text-danger">{cvQState.error}</p>}
+        {cvQState.success && (
+          <p className="text-sm text-success">{cvQState.success}</p>
+        )}
+        <Button type="submit" disabled={cvQPending} variant="secondary" className="w-full">
+          {cvQPending ? "Generating…" : "Generate interview questions"}
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Or upload a CV in{" "}
+          <Link href="/documents" className="font-semibold text-brand">
+            Documents
+          </Link>
+          .
+        </p>
+      </form>
+      </div>
 
       <div className="space-y-4 lg:col-span-8">
         <div className="panel-surface p-5">

@@ -38,7 +38,7 @@ export default async function InterviewPrepTrackPage({
 
   if (!track) notFound();
 
-  const [items, questions] = await Promise.all([
+  const [items, questions, cvDocuments] = await Promise.all([
     supabase
       .from("preparation_items")
       .select("id, track_id, title, status, estimated_minutes, day_number")
@@ -52,6 +52,13 @@ export default async function InterviewPrepTrackPage({
       .or(`track_id.eq.${id},track_id.is.null`)
       .order("created_at", { ascending: false })
       .limit(20),
+    supabase
+      .from("documents")
+      .select("id, title")
+      .eq("user_id", user.id)
+      .eq("document_type", "cv")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
   ]);
 
   return (
@@ -60,6 +67,7 @@ export default async function InterviewPrepTrackPage({
         tracks={[track]}
         items={items.data || []}
         questions={questions.data || []}
+        cvDocuments={cvDocuments.data || []}
       />
     </AppShell>
   );

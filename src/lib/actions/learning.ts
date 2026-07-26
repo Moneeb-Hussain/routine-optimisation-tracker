@@ -1,10 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import OpenAI from "openai";
 import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/env";
+import {
+  getOpenAIModel,
+  isOpenAIConfigured,
+  isSupabaseConfigured,
+} from "@/lib/env";
+import {
+  parseStudyPlanHeuristic,
+  studyPlanParseSchema,
+} from "@/lib/domain/study-plan";
 
-export type ActionState = { error?: string; success?: string };
+export type ActionState = { error?: string; success?: string; planId?: string };
 
 async function requireUser() {
   if (!isSupabaseConfigured()) {
@@ -54,7 +63,7 @@ export async function createLearningPlanAction(
       title,
       area: String(formData.get("area") || "general"),
       goal: String(formData.get("goal") || ""),
-      daily_minutes: Number(formData.get("daily_minutes") || 45),
+      daily_minutes: Number(formData.get("daily_minutes") || 60),
     })
     .select("id")
     .single();
@@ -81,7 +90,118 @@ export async function createLearningPlanAction(
   }
 
   revalidatePath("/learning");
-  return { success: "Learning plan created." };
+  return { success: "Study plan created.", planId: plan?.id };
+}
+
+export async function importStudyPlanFromDocumentAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const ctx = await requireUser();
+  if (ctx.error || !ctx.supabase || !ctx.user) return { error: ctx.error || "Unauthorized" };
+
+  const documentId = String(formData.get("document_id") || "");
+  const area = String(formData.get("area") || "robotics").trim() || "robotics";
+  const dailyMinutes = Number(formData.get("daily_minutes") || 60) || 60;
+  if (!documentId) return { error: "Select a document with a day-wise plan." };
+
+  const { data: doc } = await ctx.supabase
+    .from("documents")
+    .select("id, title, active_version")
+    .eq("id", documentId)
+    .eq("user_id", ctx.user.id)
+    .maybeSingle();
+  if (!doc) return { error: "Document not found." };
+
+  const { data: version } = await ctx.supabase
+    .from("document_versions")
+    .select("extracted_text")
+    .eq("document_id", documentId)
+    .eq("version", doc.active_version)
+    .eq("user_id", ctx.user.id)
+    .maybeSingle();
+
+  const text = (version?.extracted_text || "").trim();
+  if (!text) {
+    return {
+      error:
+        "Document has no extracted text. Open it in Documents and paste/save text first.",
+    };
+  }
+
+  let parsed = parseStudyPlanHeuristic(text, area, dailyMinutes);
+
+  if (isOpenAIConfigured()) {
+    try {
+      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const model = getOpenAIModel();
+      const response = await client.responses.create({
+        model,
+        input: [
+          {
+            role: "system",
+            content: `You convert a day-wise study plan document into structured JSON for Mission USA AI.
+Return JSON: { title, area, daily_minutes, days: [{ day_number, title, description, estimated_minutes }] }.
+Prefer ~${dailyMinutes} minutes per day. Keep day titles actionable. Do not invent days that are not in the source.
+Area hint: ${area}.`,
+          },
+          {
+            role: "user",
+            content: text.slice(0, 80_000),
+          },
+        ],
+        text: { format: { type: "json_object" } },
+      });
+      const candidate = studyPlanParseSchema.safeParse(
+        JSON.parse(response.output_text || "{}"),
+      );
+      if (candidate.success && candidate.data.days.length > 0) {
+        parsed = {
+          ...candidate.data,
+          area: candidate.data.area || area,
+          daily_minutes: candidate.data.daily_minutes || dailyMinutes,
+        };
+      }
+    } catch {
+      // keep heuristic
+    }
+  }
+
+  const { data: plan, error } = await ctx.supabase
+    .from("learning_plans")
+    .insert({
+      user_id: ctx.user.id,
+      title: parsed.title || `${area} study plan`,
+      area: parsed.area || area,
+      goal: `Day-wise ${parsed.area || area} plan (~${parsed.daily_minutes}m/day)`,
+      daily_minutes: parsed.daily_minutes || dailyMinutes,
+      source_document_id: documentId,
+    })
+    .select("id")
+    .single();
+
+  if (error) return { error: error.message };
+  if (!plan) return { error: "Could not create plan." };
+
+  await ctx.supabase.from("learning_items").insert(
+    parsed.days.map((d, index) => ({
+      user_id: ctx.user!.id,
+      plan_id: plan.id,
+      title: d.title,
+      description: d.description || "",
+      day_number: d.day_number || index + 1,
+      estimated_minutes: d.estimated_minutes || dailyMinutes,
+      sort_order: index,
+    })),
+  );
+  await refreshPlanProgress(plan.id, ctx.user.id);
+
+  revalidatePath("/learning");
+  revalidatePath(`/learning/${plan.id}`);
+  return {
+    success: `Imported ${parsed.days.length} days into study plan.`,
+    planId: plan.id,
+  };
 }
 
 export async function addLearningItemAction(
@@ -99,12 +219,15 @@ export async function addLearningItemAction(
     user_id: ctx.user.id,
     plan_id: planId,
     title,
-    estimated_minutes: Number(formData.get("estimated_minutes") || 20),
+    description: String(formData.get("description") || ""),
+    day_number: Number(formData.get("day_number") || 0) || null,
+    estimated_minutes: Number(formData.get("estimated_minutes") || 60),
   });
 
   if (error) return { error: error.message };
   await refreshPlanProgress(planId, ctx.user.id);
   revalidatePath("/learning");
+  revalidatePath(`/learning/${planId}`);
   return { success: "Item added." };
 }
 
@@ -127,5 +250,6 @@ export async function toggleLearningItemDoneAction(
 
   await refreshPlanProgress(planId, ctx.user.id);
   revalidatePath("/learning");
+  revalidatePath(`/learning/${planId}`);
   revalidatePath("/dashboard");
 }

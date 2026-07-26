@@ -23,6 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Flag,
+  GraduationCap,
+  Compass,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -44,7 +46,9 @@ const sections = [
   {
     title: "Admissions",
     items: [
+      { label: "Universities", href: "/universities", icon: GraduationCap },
       { label: "Professor CRM", href: "/professors", icon: Users },
+      { label: "AI Discover", href: "/discover", icon: Compass },
       { label: "Email Studio", href: "/email-studio", icon: Mail },
       { label: "Document Vault", href: "/documents", icon: FolderOpen },
       { label: "Journey to USA", href: "/journey", icon: Plane },
@@ -54,7 +58,7 @@ const sections = [
     title: "Prepare",
     items: [
       { label: "Interview Prep", href: "/interview-prep", icon: Mic2 },
-      { label: "Learning Plans", href: "/learning", icon: BookOpen },
+      { label: "Study Plans", href: "/learning", icon: BookOpen },
       { label: "Sleep & Energy", href: "/sleep", icon: Moon },
       { label: "AI Coach", href: "/coach", icon: Sparkles },
     ],

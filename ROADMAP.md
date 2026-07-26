@@ -40,6 +40,9 @@
 - [x] Reminders CRUD + notification prefs (migration 0005)
 - [x] Embeddings + match_document_chunks (migration 0006)
 - [x] Resend email + `/api/cron/reminders` (CRON_SECRET)
+- [x] Study Plans from day-wise documents + tracking
+- [x] CV → LLM interview questions
+- [x] AI Discover (web_search universities + professors)
 - [ ] Export packs
 
 ## Phase 5 — Production hardening

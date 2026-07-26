@@ -7,10 +7,12 @@ import {
   updateDocumentTextAction,
   type ActionState,
 } from "@/lib/actions/documents";
+import { generateInterviewQuestionsFromCvAction } from "@/lib/actions/prep";
 import { analyzeCvAgainstProfile } from "@/lib/domain/cv-intelligence";
 import { documentTypeLabel } from "@/lib/domain/documents";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 type ProfileLite = {
   full_name: string;
@@ -54,6 +56,10 @@ export function DocumentDetailClient({
   const [deactivating, startDeactivate] = useTransition();
   const [reembedding, startReembed] = useTransition();
   const [reembedMsg, setReembedMsg] = useState<string | null>(null);
+  const [cvQState, cvQAction, cvQPending] = useActionState(
+    generateInterviewQuestionsFromCvAction,
+    {} as ActionState,
+  );
 
   const analysis =
     document.document_type === "cv" && version?.extracted_text && profile
@@ -127,6 +133,26 @@ export function DocumentDetailClient({
             </Button>
           )}
         </div>
+        {document.document_type === "cv" && (
+          <form action={cvQAction} className="space-y-2 rounded-lg border border-border bg-card p-3">
+            <p className="text-xs font-semibold text-muted-foreground">
+              Professor interview prep
+            </p>
+            <input type="hidden" name="document_id" value={document.id} />
+            <Button type="submit" size="sm" disabled={cvQPending} className="w-full">
+              {cvQPending ? "Generating…" : "Generate interview questions"}
+            </Button>
+            {cvQState.error && <p className="text-xs text-danger">{cvQState.error}</p>}
+            {cvQState.success && (
+              <p className="text-xs text-success">
+                {cvQState.success}{" "}
+                <Link href="/interview-prep" className="font-semibold text-brand">
+                  Open Interview Prep
+                </Link>
+              </p>
+            )}
+          </form>
+        )}
         {reembedMsg && (
           <p className="text-xs text-muted-foreground">{reembedMsg}</p>
         )}

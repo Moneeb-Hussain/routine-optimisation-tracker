@@ -12,7 +12,8 @@
 | AI professor briefs (OpenAI) | Done (needs OPENAI_API_KEY) |
 | Morning Brief + Coach + Interview Prep + Learning | Done (apply migration **0004**) |
 | Analytics + Journey + Reminders | Done (apply **0005**) |
-| Embeddings + Resend email cron | Done (apply **0006**; needs keys below) |
+| Embeddings + Resend email cron | Done (apply **0006**) |
+| Study Plans + CV interview Qs + AI Discover | Done (apply **0007**) |
 | Security pass / export packs | Later |
 
 ## Apply latest migration
@@ -25,8 +26,15 @@ In Supabase SQL Editor, run **in order** if not already applied:
 4. `supabase/migrations/0004_phase3_prep_coach.sql`
 5. `supabase/migrations/0005_phase4_reminders.sql` ← **reminders**
 6. `supabase/migrations/0006_embeddings_reminders_email.sql` ← **embeddings + email logs**
+7. `supabase/migrations/0007_study_plans_discover.sql` ← **study plans + AI Discover**
 
 See [DEPLOY.md](./DEPLOY.md) for hosting, Resend, and cron.
+
+### New sections (after 0007)
+
+1. **Study Plans** (`/learning`) — upload a day-wise doc in Documents → Import → mark days done  
+2. **Interview Prep** — **From your CV** generates professor-interview questions (needs OpenAI)  
+3. **AI Discover** (`/discover`) — web-search universities + professors (US/Canada) → Import to CRM  
 
 ### Morning checklist (use tomorrow)
 

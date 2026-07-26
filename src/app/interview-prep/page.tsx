@@ -39,7 +39,7 @@ export default async function InterviewPrepPage() {
     );
   }
 
-  const [tracks, items, questions] = await Promise.all([
+  const [tracks, items, questions, cvDocuments] = await Promise.all([
     supabase
       .from("preparation_tracks")
       .select("id, title, track_type, description, status, completion_percent")
@@ -55,18 +55,26 @@ export default async function InterviewPrepPage() {
       .select("id, question, category, difficulty, expected_answer")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(20),
+      .limit(40),
+    supabase
+      .from("documents")
+      .select("id, title")
+      .eq("user_id", user.id)
+      .eq("document_type", "cv")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
   ]);
 
   return (
     <AppShell
       title="Interview Prep"
-      subtitle="Build one track, mark drills done, bank questions"
+      subtitle="Tracks, CV-generated questions, and practice attempts"
     >
       <InterviewPrepClient
         tracks={tracks.data || []}
         items={items.data || []}
         questions={questions.data || []}
+        cvDocuments={cvDocuments.data || []}
       />
     </AppShell>
   );

@@ -1,10 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import OpenAI from "openai";
 import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/env";
+import {
+  getOpenAIModel,
+  isOpenAIConfigured,
+  isSupabaseConfigured,
+} from "@/lib/env";
 
-export type ActionState = { error?: string; success?: string };
+export type ActionState = { error?: string; success?: string; count?: number };
 
 async function requireUser() {
   if (!isSupabaseConfigured()) {
@@ -182,4 +188,160 @@ export async function saveQuestionAttemptAction(
   if (error) return { error: error.message };
   revalidatePath("/interview-prep");
   return { success: "Attempt logged." };
+}
+
+const interviewQuestionsSchema = z.object({
+  questions: z.array(
+    z.object({
+      question: z.string(),
+      category: z.enum([
+        "research",
+        "behavioral",
+        "project",
+        "motivation",
+        "technical",
+        "general",
+      ]),
+      difficulty: z.enum(["easy", "medium", "hard"]),
+      expected_answer: z.string(),
+    }),
+  ),
+});
+
+export async function generateInterviewQuestionsFromCvAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const ctx = await requireUser();
+  if (ctx.error || !ctx.supabase || !ctx.user) return { error: ctx.error || "Unauthorized" };
+  if (!isOpenAIConfigured()) {
+    return { error: "OPENAI_API_KEY is required to generate interview questions." };
+  }
+
+  const documentId = String(formData.get("document_id") || "");
+  const trackId = String(formData.get("track_id") || "") || null;
+
+  let cvText = "";
+  if (documentId) {
+    const { data: doc } = await ctx.supabase
+      .from("documents")
+      .select("id, active_version, document_type")
+      .eq("id", documentId)
+      .eq("user_id", ctx.user.id)
+      .maybeSingle();
+    if (!doc) return { error: "CV document not found." };
+    const { data: version } = await ctx.supabase
+      .from("document_versions")
+      .select("extracted_text")
+      .eq("document_id", documentId)
+      .eq("version", doc.active_version)
+      .eq("user_id", ctx.user.id)
+      .maybeSingle();
+    cvText = version?.extracted_text || "";
+  } else {
+    const { data: docs } = await ctx.supabase
+      .from("documents")
+      .select("id, active_version")
+      .eq("user_id", ctx.user.id)
+      .eq("document_type", "cv")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const doc = docs?.[0];
+    if (doc) {
+      const { data: version } = await ctx.supabase
+        .from("document_versions")
+        .select("extracted_text")
+        .eq("document_id", doc.id)
+        .eq("version", doc.active_version)
+        .eq("user_id", ctx.user.id)
+        .maybeSingle();
+      cvText = version?.extracted_text || "";
+    }
+  }
+
+  if (!cvText.trim()) {
+    return {
+      error:
+        "No CV text found. Upload a CV in Documents and save extracted text first.",
+    };
+  }
+
+  const { data: profile } = await ctx.supabase
+    .from("profiles")
+    .select(
+      "full_name, degree, university, research_interests, strongest_project, achievements, target_primary",
+    )
+    .eq("id", ctx.user.id)
+    .maybeSingle();
+
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const model = getOpenAIModel();
+
+  try {
+    const response = await client.responses.create({
+      model,
+      input: [
+        {
+          role: "system",
+          content: `You prepare graduate / professor-meeting interview questions for Mission USA AI.
+Based on the CV and profile, generate 12–18 questions a professor or admissions interviewer would likely ask.
+Categories: research, behavioral, project, motivation, technical, general.
+Include a short expected_answer outline (talking points), not a script.
+Never invent degrees or awards not in the CV.
+Return JSON: { questions: [{ question, category, difficulty, expected_answer }] }.`,
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            profile,
+            cv_excerpt: cvText.slice(0, 60_000),
+          }),
+        },
+      ],
+      text: { format: { type: "json_object" } },
+    });
+
+    const parsed = interviewQuestionsSchema.safeParse(
+      JSON.parse(response.output_text || "{}"),
+    );
+    if (!parsed.success || parsed.data.questions.length === 0) {
+      return { error: "Model returned no usable questions. Try again." };
+    }
+
+    const rows = parsed.data.questions.map((q) => ({
+      user_id: ctx.user!.id,
+      track_id: trackId,
+      question: q.question,
+      category: q.category,
+      difficulty: q.difficulty,
+      expected_answer: q.expected_answer,
+    }));
+
+    const { error } = await ctx.supabase.from("question_bank").insert(rows);
+    if (error) return { error: error.message };
+
+    await ctx.supabase.from("ai_runs").insert({
+      user_id: ctx.user.id,
+      feature: "interview_questions",
+      request_type: "from_cv",
+      model,
+      prompt_version: "interview_q_v1",
+      output: parsed.data,
+      referenced_entities: documentId
+        ? [{ type: "document", id: documentId }]
+        : [],
+    });
+
+    revalidatePath("/interview-prep");
+    if (documentId) revalidatePath(`/documents/${documentId}`);
+    return {
+      success: `Generated ${rows.length} interview questions from your CV.`,
+      count: rows.length,
+    };
+  } catch (err) {
+    return {
+      error: err instanceof Error ? err.message : "Question generation failed.",
+    };
+  }
 }

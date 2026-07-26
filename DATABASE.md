@@ -10,6 +10,7 @@ Apply in order in the Supabase SQL Editor:
 4. `supabase/migrations/0004_phase3_prep_coach.sql` ← Interview prep, learning, morning briefs, coach
 5. `supabase/migrations/0005_phase4_reminders.sql` ← In-app reminders
 6. `supabase/migrations/0006_embeddings_reminders_email.sql` ← pgvector embeddings + email logs
+7. `supabase/migrations/0007_study_plans_discover.sql` ← Study plan source docs + AI Discover
 
 ### Auth setup reminder
 
@@ -60,6 +61,8 @@ Apply in order in the Supabase SQL Editor:
 | `reminders` | In-app (and email) reminders |
 | `reminder_email_logs` | Email send audit |
 | `document_chunks.embedding` | pgvector (1536) for semantic search |
+| `discovery_runs` / `discovery_recommendations` | AI Discover universities + professors |
+| `learning_plans.source_document_id` | Link study plan to uploaded day-wise doc |
 
 ## Security
 
