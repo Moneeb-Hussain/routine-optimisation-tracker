@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 
+
 test.describe("Mission USA AI smoke", () => {
   test("home and login are reachable", async ({ page }) => {
     await page.goto("/");
