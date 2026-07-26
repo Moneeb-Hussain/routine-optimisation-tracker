@@ -8,6 +8,7 @@ import {
   chunkText,
   extractTextFromUpload,
 } from "@/lib/domain/documents";
+import { embedDocumentChunks } from "@/lib/ai/embed-chunks";
 
 export type ActionState = { error?: string; success?: string; documentId?: string };
 
@@ -83,7 +84,7 @@ export async function uploadDocumentAction(
     tags,
     notes,
     active_version: 1,
-    embedding_status: extracted.status === "ready" ? "ready" : "skipped",
+    embedding_status: "pending",
     is_active: true,
   });
 
@@ -112,6 +113,9 @@ export async function uploadDocumentAction(
   if (versionError) return { error: versionError.message };
 
   const chunks = chunkText(extracted.text);
+  let embeddingStatus: string =
+    extracted.status === "ready" ? "ready" : "skipped";
+
   if (chunks.length && version) {
     await ctx.supabase.from("document_chunks").insert(
       chunks.map((content, chunk_index) => ({
@@ -123,12 +127,29 @@ export async function uploadDocumentAction(
         token_estimate: Math.ceil(content.length / 4),
       })),
     );
+
+    embeddingStatus = await embedDocumentChunks({
+      supabase: ctx.supabase,
+      userId: ctx.user.id,
+      documentId,
+      versionId: version.id,
+      chunks,
+    });
   }
+
+  await ctx.supabase
+    .from("documents")
+    .update({ embedding_status: embeddingStatus })
+    .eq("id", documentId)
+    .eq("user_id", ctx.user.id);
 
   revalidatePath("/documents");
   revalidatePath(`/documents/${documentId}`);
   return {
-    success: "Document uploaded to private storage.",
+    success:
+      embeddingStatus === "embedded"
+        ? "Document uploaded and embedded for semantic coach search."
+        : "Document uploaded to private storage.",
     documentId,
   };
 }
@@ -177,6 +198,8 @@ export async function updateDocumentTextAction(
   await ctx.supabase.from("document_chunks").delete().eq("version_id", version.id);
 
   const chunks = chunkText(extractedText);
+  let embeddingStatus = extractedText.trim() ? "ready" : "skipped";
+
   if (chunks.length) {
     await ctx.supabase.from("document_chunks").insert(
       chunks.map((content, chunk_index) => ({
@@ -188,19 +211,99 @@ export async function updateDocumentTextAction(
         token_estimate: Math.ceil(content.length / 4),
       })),
     );
+
+    embeddingStatus = await embedDocumentChunks({
+      supabase: ctx.supabase,
+      userId: ctx.user.id,
+      documentId,
+      versionId: version.id,
+      chunks,
+    });
   }
 
   await ctx.supabase
     .from("documents")
     .update({
-      embedding_status: extractedText.trim() ? "ready" : "skipped",
+      embedding_status: embeddingStatus,
     })
     .eq("id", documentId)
     .eq("user_id", ctx.user.id);
 
   revalidatePath(`/documents/${documentId}`);
   revalidatePath("/documents");
-  return { success: "Extracted text saved. CV intelligence can use it now." };
+  return {
+    success:
+      embeddingStatus === "embedded"
+        ? "Text saved and re-embedded for coach search."
+        : "Extracted text saved. CV intelligence can use it now.",
+  };
+}
+
+export async function reembedDocumentAction(documentId: string): Promise<ActionState> {
+  const ctx = await requireUser();
+  if (ctx.error || !ctx.supabase || !ctx.user) return { error: ctx.error || "Unauthorized" };
+  if (!documentId) return { error: "Document id required." };
+
+  const { data: doc } = await ctx.supabase
+    .from("documents")
+    .select("id, active_version")
+    .eq("id", documentId)
+    .eq("user_id", ctx.user.id)
+    .maybeSingle();
+  if (!doc) return { error: "Document not found." };
+
+  const { data: version } = await ctx.supabase
+    .from("document_versions")
+    .select("id, extracted_text")
+    .eq("document_id", documentId)
+    .eq("version", doc.active_version)
+    .eq("user_id", ctx.user.id)
+    .maybeSingle();
+  if (!version) return { error: "Active version not found." };
+
+  const text = version.extracted_text || "";
+  await ctx.supabase.from("document_chunks").delete().eq("version_id", version.id);
+  const chunks = chunkText(text);
+  if (!chunks.length) {
+    await ctx.supabase
+      .from("documents")
+      .update({ embedding_status: "skipped" })
+      .eq("id", documentId);
+    return { error: "No extracted text to embed. Paste text first." };
+  }
+
+  await ctx.supabase.from("document_chunks").insert(
+    chunks.map((content, chunk_index) => ({
+      user_id: ctx.user!.id,
+      document_id: documentId,
+      version_id: version.id,
+      chunk_index,
+      content,
+      token_estimate: Math.ceil(content.length / 4),
+    })),
+  );
+
+  const status = await embedDocumentChunks({
+    supabase: ctx.supabase,
+    userId: ctx.user.id,
+    documentId,
+    versionId: version.id,
+    chunks,
+  });
+
+  await ctx.supabase
+    .from("documents")
+    .update({ embedding_status: status })
+    .eq("id", documentId)
+    .eq("user_id", ctx.user.id);
+
+  revalidatePath(`/documents/${documentId}`);
+  return {
+    success:
+      status === "embedded"
+        ? "Document re-embedded."
+        : `Embedding status: ${status}. Check OPENAI_API_KEY and migration 0006.`,
+  };
 }
 
 export async function deactivateDocumentAction(documentId: string) {

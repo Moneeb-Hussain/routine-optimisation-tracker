@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/env";
+import { isOpenAIConfigured, isSupabaseConfigured } from "@/lib/env";
 import { buildRuleMorningBrief, type MorningBrief } from "@/lib/domain/morning-brief";
 import { rankChunksByQuery } from "@/lib/domain/documents";
+import { embedQuery, toVectorLiteral } from "@/lib/ai/embeddings";
 
 function todayInTimeZone(timeZone: string) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -28,6 +29,7 @@ export type CoachContext = {
   deadlines: Array<{ name: string; deadline: string | null }>;
   recentWins: string[];
   documentSnippets: Array<{ title: string; content: string }>;
+  retrievalMode: "embedding" | "keyword" | "none";
 };
 
 export async function getCoachContext(query?: string): Promise<CoachContext | null> {
@@ -97,24 +99,67 @@ export async function getCoachContext(query?: string): Promise<CoachContext | nu
             (tracks.data || []).length,
         );
 
-  const ranked = rankChunksByQuery(
-    (chunks.data || []).map((c) => {
-      const doc = Array.isArray(c.documents) ? c.documents[0] : c.documents;
-      return {
-        content: c.content,
-        document_title: doc?.title || "Document",
-      };
-    }),
+  const searchQuery =
     query ||
-      [
-        plan.data?.primary_goal,
-        ...(tasks.data || []).map((t) => t.title),
-        "cv research project",
-      ]
-        .filter(Boolean)
-        .join(" "),
-    4,
-  );
+    [
+      plan.data?.primary_goal,
+      ...(tasks.data || []).map((t) => t.title),
+      "cv research project",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+  let documentSnippets: Array<{ title: string; content: string }> = [];
+  let retrievalMode: CoachContext["retrievalMode"] = "none";
+
+  if (isOpenAIConfigured() && searchQuery.trim()) {
+    try {
+      const vector = await embedQuery(searchQuery);
+      if (vector) {
+        const { data: matched, error } = await supabase.rpc(
+          "match_document_chunks",
+          {
+            query_embedding: toVectorLiteral(vector),
+            match_user_id: user.id,
+            match_count: 4,
+          },
+        );
+        if (!error && matched && matched.length > 0) {
+          documentSnippets = matched.map(
+            (m: {
+              document_title?: string;
+              content: string;
+            }) => ({
+              title: m.document_title || "Document",
+              content: (m.content || "").slice(0, 500),
+            }),
+          );
+          retrievalMode = "embedding";
+        }
+      }
+    } catch {
+      // fall through to keyword
+    }
+  }
+
+  if (documentSnippets.length === 0) {
+    const ranked = rankChunksByQuery(
+      (chunks.data || []).map((c) => {
+        const doc = Array.isArray(c.documents) ? c.documents[0] : c.documents;
+        return {
+          content: c.content,
+          document_title: doc?.title || "Document",
+        };
+      }),
+      searchQuery,
+      4,
+    );
+    documentSnippets = ranked.map((r) => ({
+      title: r.document_title || "Document",
+      content: r.content.slice(0, 500),
+    }));
+    retrievalMode = documentSnippets.length ? "keyword" : "none";
+  }
 
   return {
     timezone,
@@ -151,10 +196,8 @@ export async function getCoachContext(query?: string): Promise<CoachContext | nu
       deadline: u.deadline,
     })),
     recentWins: (doneTasks.data || []).map((t) => t.title),
-    documentSnippets: ranked.map((r) => ({
-      title: r.document_title || "Document",
-      content: r.content.slice(0, 500),
-    })),
+    documentSnippets,
+    retrievalMode,
   };
 }
 

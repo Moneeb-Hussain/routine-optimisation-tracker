@@ -23,8 +23,9 @@ In Supabase SQL Editor, run **in order** if not already applied:
 3. `supabase/migrations/0003_phase2_documents.sql`
 4. `supabase/migrations/0004_phase3_prep_coach.sql`
 5. `supabase/migrations/0005_phase4_reminders.sql` ← **reminders**
+6. `supabase/migrations/0006_embeddings_reminders_email.sql` ← **embeddings + email logs**
 
-See [DEPLOY.md](./DEPLOY.md) for hosting.
+See [DEPLOY.md](./DEPLOY.md) for hosting, Resend, and cron.
 
 ### Morning checklist (use tomorrow)
 

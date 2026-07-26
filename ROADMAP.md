@@ -38,7 +38,8 @@
 - [x] Analytics dashboard (live week charts + weekly review)
 - [x] Journey to USA (goal-linked stages)
 - [x] Reminders CRUD + notification prefs (migration 0005)
-- [ ] Email delivery via Resend + cron worker
+- [x] Embeddings + match_document_chunks (migration 0006)
+- [x] Resend email + `/api/cron/reminders` (CRON_SECRET)
 - [ ] Export packs
 
 ## Phase 5 — Production hardening

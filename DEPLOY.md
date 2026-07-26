@@ -44,9 +44,31 @@ npm start
 - Build command: `npm run build`
 - Output: default Next.js
 
-## Email reminders
+## Email reminders + cron
 
-In-app reminders work after migration `0005`. Email delivery needs Resend (or similar) + a cron worker — not wired yet. Prefs for quiet hours / max emails are saved now.
+1. Set in `.env.local` / Vercel:
+   - `RESEND_API_KEY`
+   - `RESEND_FROM_EMAIL` (verified domain in Resend)
+   - `CRON_SECRET` (long random string)
+   - `SUPABASE_SERVICE_ROLE_KEY` (server only)
+
+2. Create an in-app reminder with channel **Email** or **Both**, due soon.
+
+3. Hit cron (local test):
+```bash
+curl -X POST http://localhost:3000/api/cron/reminders \
+  -H "Authorization: Bearer YOUR_CRON_SECRET"
+```
+
+4. On Vercel, `vercel.json` schedules `/api/cron/reminders` every 15 minutes. Also set `CRON_SECRET` and authorize Vercel Cron with the same Bearer header (or use Vercel’s `CRON_SECRET` pattern — this app expects `Authorization: Bearer $CRON_SECRET`).
+
+## Embeddings (semantic coach search)
+
+1. Run migration `0006_embeddings_reminders_email.sql`
+2. Set `OPENAI_API_KEY` and optionally `OPENAI_EMBEDDING_MODEL=text-embedding-3-small`
+3. Upload/re-save a document or click **Re-embed for coach** on the document page
+4. Ask the coach something about your CV — retrieval mode should show `embedding`
+
 
 ## E2E
 

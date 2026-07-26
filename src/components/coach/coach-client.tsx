@@ -69,6 +69,15 @@ export function CoachClient({
               <dt className="text-xs font-semibold text-muted-foreground">Interview next</dt>
               <dd className="mt-0.5">{context.interviewNext || "Create a prep track"}</dd>
             </div>
+            <div>
+              <dt className="text-xs font-semibold text-muted-foreground">Docs retrieval</dt>
+              <dd className="mt-0.5">
+                <Badge tone="neutral">{context.retrievalMode}</Badge>
+                {context.documentSnippets.length > 0
+                  ? ` · ${context.documentSnippets.length} snippet(s)`
+                  : " · no doc hits"}
+              </dd>
+            </div>
           </dl>
           <div className="mt-4 flex flex-wrap gap-1.5">
             {Object.entries(context.pipelineCounts).map(([stage, count]) => (

@@ -1,8 +1,9 @@
 "use client";
 
-import { useActionState, useTransition } from "react";
+import { useActionState, useState, useTransition } from "react";
 import {
   deactivateDocumentAction,
+  reembedDocumentAction,
   updateDocumentTextAction,
   type ActionState,
 } from "@/lib/actions/documents";
@@ -51,6 +52,8 @@ export function DocumentDetailClient({
     {} as ActionState,
   );
   const [deactivating, startDeactivate] = useTransition();
+  const [reembedding, startReembed] = useTransition();
+  const [reembedMsg, setReembedMsg] = useState<string | null>(null);
 
   const analysis =
     document.document_type === "cv" && version?.extracted_text && profile
@@ -70,7 +73,14 @@ export function DocumentDetailClient({
       <div className="panel-surface space-y-3 p-5 lg:col-span-4">
         <div className="flex flex-wrap gap-2">
           <Badge tone="brand">{documentTypeLabel(document.document_type)}</Badge>
-          <Badge tone={document.embedding_status === "ready" ? "good" : "neutral"}>
+          <Badge
+            tone={
+              document.embedding_status === "embedded" ||
+              document.embedding_status === "ready"
+                ? "good"
+                : "neutral"
+            }
+          >
             {document.embedding_status}
           </Badge>
           {!document.is_active && <Badge tone="watch">inactive</Badge>}
@@ -90,19 +100,38 @@ export function DocumentDetailClient({
         ) : (
           <p className="text-xs text-muted-foreground">Signed URL unavailable.</p>
         )}
-        {document.is_active && (
+        <div className="flex flex-wrap gap-2">
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            disabled={deactivating}
-            onClick={() => startDeactivate(() => deactivateDocumentAction(document.id))}
+            disabled={reembedding}
+            onClick={() =>
+              startReembed(async () => {
+                const res = await reembedDocumentAction(document.id);
+                setReembedMsg(res.error || res.success || null);
+              })
+            }
           >
-            Deactivate version set
+            {reembedding ? "Embedding…" : "Re-embed for coach"}
           </Button>
+          {document.is_active && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={deactivating}
+              onClick={() => startDeactivate(() => deactivateDocumentAction(document.id))}
+            >
+              Deactivate
+            </Button>
+          )}
+        </div>
+        {reembedMsg && (
+          <p className="text-xs text-muted-foreground">{reembedMsg}</p>
         )}
         <p className="text-xs text-muted-foreground">
-          Files stay private. Uploaded CV is never auto-overwritten by analysis.
+          Files stay private. Re-embed after pasting text (needs OPENAI_API_KEY + migration 0006).
         </p>
       </div>
 
